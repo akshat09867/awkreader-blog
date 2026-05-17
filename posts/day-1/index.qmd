@@ -1,0 +1,30 @@
+---
+title: "Day 1 with awkreader: Laying the Foundation 🚀"
+author: "Akshat Maurya"
+date: "2026-05-17"
+categories: [awkreader, GSoC, RStats]
+---
+
+Today marks the official start of my work on **awkreader**.I am incredibly excited to finally dive into the code and start making contributions. 
+The first day of any software project is always about getting your bearings, and today was no exception. Here is a quick recap of what I accomplished on Day 1.
+
+**1. Setting Up the Package Structure**
+I kicked off the day by setting up the foundational package structure. My mentor had provided some previous completions and groundwork, which made this process 
+much smoother. Getting the environment properly configured is always a crucial first step...it ensures that everything else moving forward is built on a solid foundation.
+
+**2. Deep Dive into the Vignette **
+Before writing or modifying any code, I needed to understand what the package is currently doing under the hood. I spent a good chunk of time reading through 
+the package vignette.
+This was super helpful for getting a high-level overview of the project. I familiarized myself with the core functions, the specific parameters they accept, and 
+the expected outputs. Understanding the existing logic is key to making sure my future additions blend seamlessly with the current codebase.
+
+**3. Testing the Waters (and the Code!) **
+With the structure set up and a better understanding of the package mechanics, it was time to test things out. I wanted to verify whether the existing example 
+files were running properly.
+I fired up the main source file, awkreader_v2.R, and ran the examples. To my absolute delight, everything ran perfectly fine without any unexpected errors or bugs! 
+There's no better feeling on Day 1 than running the source code and seeing a clean, successful execution.
+
+**Wrapping Up**
+Overall, it was a highly productive first day. I’ve successfully set up my workspace, wrapped my head around the existing architecture, and confirmed that 
+the base code is fully functional.
+I’m looking forward to getting my hands dirty with the actual development tomorrow. Stay tuned for more updates as I continue my journey with awkreader!
