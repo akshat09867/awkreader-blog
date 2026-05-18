@@ -60,6 +60,7 @@ This is dangerous because doing a greater-than comparison on characters behaves 
 
 * **The short-term fix:** I cast the data types explicitly inside the tests to pass the checks.
 * **The long-term goal:** I plan to update `filtered.fread` so it automatically preserves the original column types. 
+
 ### 5. Green Checkmarks on GitHub Actions 
 After applying the temporary fixes for those two issues, I pushed my code to GitHub. We don't currently have any complete `.Rd` documentation or `.Rmd` vignettes, so the Continuous Integration (CI) pipeline only checked the `tests` folder. 
 
