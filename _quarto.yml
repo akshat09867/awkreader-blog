@@ -3,15 +3,13 @@ project:
 
 website:
   description: "A blog built with Quarto"
-  site-url: https://your-website-url.example.com # you must change this appropriately for RSS feeds to work properly
+  site-url: https://aksh-at-blog.netlify.app/ # you must change this appropriately for RSS feeds to work properly
   title: "Akshat's Coding Blog"
   navbar:
     right:
       - about.qmd
       - icon: github
-        href: https://github.com/
-      - icon: bluesky
-        href: https://bsky.app/
+        href: https://github.com/akshat09867
 format:
   html:
     theme:
