@@ -1,0 +1,77 @@
+---
+title: "Week 2 with awkreader: Optimization & Versatility 🚀"
+author: "Akshat Maurya"
+date: "2026-05-23"
+categories: [awkreader, GSoC, RStats, Optimization]
+image: "m1.jpg"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    theme: flatly
+---
+
+Welcome back to my journey building **awkreader**! After establishing the foundational test suite and CI pipelines last week, I moved on to the next phase: expanding the package's versatility and driving down execution overhead.
+
+This week until now, I tackled two major objectives: generalizing the file parser to support custom delimiters and refactoring our header extraction logic for significant performance gains.
+
+## 1. Breaking Free from CSVs: The `delim` Parameter
+
+Until now, the package was hardcoded to expect comma-separated values. To make `awkreader` a truly generalized tool for data science, I introduced a new `delim` parameter.
+
+This allows users to specify custom separators (like `\t` for TSVs or `|` for pipe-separated files). To ensure this was integrated correctly, I wrote unit tests using `.psv` (pipe-separated values) data to verify that the AWK generation and the downstream `data.table::fread()` call remain perfectly synced. Now, `awkreader` can handle a variety of structured text data with ease!
+
+## 2. The Need for Speed: Header Optimization
+
+The next crucial step was optimizing the package’s performance. I analyzed how the package extracts the first row (the header) of a file to understand its structure, and I found a prime target for refactoring.
+
+### The Old Way
+
+Previously, the package used a high-overhead approach:
+
+```r
+header.statement <- sprintf("header.dt <- fread(input = '%s', nrows = 1)", the.files[1])
+eval(expr = parse(text = header.statement))
+```
+
+**The Problem**
+
+This approach invoked data.table::fread. While fread is a world-class parser for loading data, using it merely to peek at a single header line is massive overkill.
+
+* It forces the system to open a connection
+* Detect file formats
+* Parse the header into a data.table object
+* Register metadata in R’s memory
+All for one line of text.
+
+Furthermore, the use of eval(parse(text = ...)) is not only slow but also poses a significant security risk by blindly executing strings.
+
+
+**The "New Way" (Lightweight & Native)**
+
+I refactored the logic to decouple header detection from the data-loading engine:
+```r
+first_file_con <- file(the.files[1], "r")
+header_line <- readLines(first_file_con, n = 1)
+close(first_file_con)
+```
+**Why this is better**
+
+* Minimal I/O Overhead: By using base R’s native file connection, we bypass the entire initialization of the data.table engine. It fetches raw text instantly.
+* Security & Stability: By eliminating eval(parse()), we have made the package safer and more predictable.
+
+### 3. Proving It: The Microbenchmark Test
+
+In engineering, theory is good, but data is better. To validate the optimization, I used the microbenchmark package to compare the old and new methods across 10,000 iterations.
+
+
+| Method | Min (µs) | Mean (µs) | Median (µs) | Max (µs) |
+|:--|--:|--:|--:|--:|
+| **Old Approach** | 475.855 | 631.156 | 497.298 | 9691.751 |
+| **New Approach** | 13.878 | 41.149 | 17.001 | 2162.533 |
+
+**The Verdict**
+
+The results are outstanding! The new base R method is, on average, over 15 times faster (dropping from ~631 µs to ~41 µs). Looking at the median time, it is a staggering 29 times faster.
+
+While saving a few hundred microseconds seems minor for a single file, awkreader is designed to traverse directories containing thousands or millions of files. By removing this bottleneck, we have significantly improved the scalability of the package for real-world, large-scale data workflows.
