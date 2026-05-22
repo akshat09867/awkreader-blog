@@ -1,5 +1,5 @@
 ---
-title: "Week 1 with awkreader: Laying the Foundation 🚀"
+title: "Week 1 with awkreader: Laying the Foundation "
 author: "Akshat Maurya"
 date: "2026-05-16"
 categories: [awkreader, GSoC, RStats]
@@ -157,4 +157,3 @@ To my relief, the tests ran on both Ubuntu and macOS environments and passed suc
 
 This week marks the official start of my work on awkreader! I am incredibly excited to finally dive into the code and start making contributions.
 
-The first week of any software project is always about getting your bearings, setting up the environment, and testing the waters. Here is a recap of what I have accomplished so far this week.
