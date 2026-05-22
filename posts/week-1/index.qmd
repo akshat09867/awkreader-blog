@@ -155,5 +155,3 @@ After applying the temporary fixes for those two issues, I pushed my code to Git
 
 To my relief, the tests ran on both Ubuntu and macOS environments and passed successfully! Seeing that green checkmark on GitHub Actions after figuring out those translation bugs was definitely the highlight of my week.
 
-This week marks the official start of my work on awkreader! I am incredibly excited to finally dive into the code and start making contributions.
-
