@@ -1,5 +1,5 @@
 ---
-title: "Week 2 with awkreader: Optimization & Versatility"
+title: "Week 2 with awkreader: Optimization, Versatility & Breaking into the PC Universe"
 author: "Akshat Maurya"
 date: "2026-05-23"
 categories: [awkreader, GSoC, RStats, Optimization]
@@ -13,7 +13,7 @@ format:
 
 Welcome back to my journey building **awkreader**! After establishing the foundational test suite and CI pipelines last week, I moved on to the next phase: expanding the package's versatility and driving down execution overhead.
 
-This week until now, I tackled two major objectives: generalizing the file parser to support custom delimiters and refactoring our header extraction logic for significant performance gains.
+This week, I tackled major objectives that directly address generalized parsing, massive performance refactoring, and critical space-handling bugs.
 
 ## 1. Breaking Free from CSVs: The `delim` Parameter
 
@@ -75,3 +75,147 @@ In engineering, theory is good, but data is better. To validate the optimization
 The results are outstanding! The new base R method is, on average, over 15 times faster (dropping from ~631 µs to ~41 µs). Looking at the median time, it is a staggering 29 times faster.
 
 While saving a few hundred microseconds seems minor for a single file, awkreader is designed to traverse directories containing thousands or millions of files. By removing this bottleneck, we have significantly improved the scalability of the package for real-world, large-scale data workflows.
+
+---
+
+## 4. Introducing the `record_count` Function 
+
+After optimizing the header extraction, we began building out a standalone record_count() function, mirroring the behavior found in [`grepreaper`](https://cran.r-project.org/web/packages/grepreaper/index.html){.external target="_blank"} package.
+
+I started implementing this by utilizing the existing input and filter logic from our `filtered.fread` function.
+
+To check if the baseline logic was working, I ran this initial test query:
+
+```r
+record_count(
+  the.files = the.files,
+  the.filter = "user > item & rating == 4",
+  return.as = "all",
+  include.filename = FALSE
+)
+```
+
+---
+
+### The Unexpected Error
+
+R immediately threw a rather confusing error:
+
+```r
+Error in setnames(x, value) :
+  Can't assign 1 names to a 3-column data.table
+```
+
+---
+
+## The Problem: The Space-Separation Trap
+
+I dug into the code and realized the issue stemmed from our mock dataset's file path:
+
+```text
+Data/ratings data/file_1.csv
+```
+
+Notice the space in `"ratings data"`.
+
+By default, AWK's `print` statement separates output variables using spaces.
+
+Because of this, AWK was streaming output like:
+
+```text
+Data/ratings data/file_1.csv 42
+```
+
+When `data.table::fread()` parsed this line, it interpreted the spaces as column separators and incorrectly split the data into **three columns**:
+
+| Column 1 | Column 2 | Column 3 |
+|---|---|---|
+| Data/ratings | data/file_1.csv | 42 |
+
+Because `include.filename = FALSE`, the downstream code executed:
+
+```r
+names(batch.data) <- "count"
+```
+
+R then attempted to assign a single column name onto a 3-column `data.table`, causing the crash.
+
+---
+
+## The Solution: Controlling AWK's Output Separator
+
+To fix this, I had to ensure AWK and `fread()` were speaking the exact same language, regardless of spaces in file paths.
+
+---
+
+### Step 1: Update the AWK Command Templates
+
+I added `-v OFS=","` right after the input delimiter flag.
+
+`OFS` stands for **Output Field Separator**.
+
+By setting it to a comma, AWK now streams output as proper comma-separated values, preserving the file path exactly as intended.
+
+```r
+if (use.windows) {
+  string.placeholder <- '"%s"'
+  statement.to.fill <- '%s -F "%s" -v OFS="," "FNR==1 && NR>1 {print prev_file, count} FNR==1 {prev_file=FILENAME; count=0; next} { %s } END {if(prev_file) print prev_file, count}" %s'
+} else {
+  string.placeholder <- "'%s'"
+  statement.to.fill <- "%s -F '%s' -v OFS=',' 'FNR==1 && NR>1 {print prev_file, count} FNR==1 {prev_file=FILENAME; count=0; next} { %s } END {if(prev_file) print prev_file, count}' %s"
+}
+```
+
+---
+
+### Step 2: Update the `fread()` and Data Cleaning Blocks
+
+Next, I updated the `fread()` call to explicitly expect comma-separated values using `sep = ","`.
+
+I also cleaned up the downstream column renaming logic so it properly handles both the filename and count columns before filtering.
+
+```r
+if (return.as != "code") {
+  if (show.warnings) {
+    batch.data <- fread(
+      cmd = awk.statements[i],
+      fill = TRUE,
+      nrows = nrows,
+      header = FALSE,
+      sep = ","
+    )
+  } else {
+    suppressWarnings(
+      batch.data <- fread(
+        cmd = awk.statements[i],
+        fill = TRUE,
+        nrows = nrows,
+        header = FALSE,
+        sep = ","
+      )
+    )
+  }
+
+  if (nrow(batch.data) > 0) {
+    names(batch.data) <- c(file.header, "count")
+
+    if (!include.filename) {
+      batch.data[, (file.header) := NULL]
+    }
+  }
+
+  list.data[[i]] <- batch.data
+}
+```
+
+---
+
+This was a surprisingly interesting debugging session because the issue wasn’t in R or AWK individually...it was in how both tools interpreted streamed text differently.
+
+## 5. The First Step Toward Full PC Compatibility
+
+The baseline test suite passed on Windows on our very first try! This proves that our core runner environment is viable, whenever the CI framework configures R on Windows, it sets up Rtools, which exposes a native port of GNU AWK (`gawk.exe`) on the system path.
+
+While this confirms our background execution pipeline works across all three major operating systems, the real work begins now. Passing baseline tests is a great start, but we still need to adapt our string-generation and translation engine to handle Windows-specific quirks like double-quote escaping and cross-platform line endings (`\r\n`).
+
+But knowing the underlying pipeline is stable gives us a rock-solid foundation to build on.

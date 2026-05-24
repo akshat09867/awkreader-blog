@@ -149,7 +149,7 @@ I cast the data types explicitly inside the tests to pass the checks.
 
 I plan to update filtered.fread so it automatically preserves the original column types.
 
-## 5. Green Checkmarks on GitHub Actions 
+## 5. Verifying Fixes via GitHub CI
 
 After applying the temporary fixes for those two issues, I pushed my code to GitHub. We don’t currently have any complete .Rd documentation or .Rmd vignettes, so the Continuous Integration (CI) pipeline only checked the tests folder.
 
