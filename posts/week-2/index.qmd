@@ -74,8 +74,6 @@ In engineering, theory is good, but data is better. To validate the optimization
 
 The results are outstanding! The new base R method is, on average, over 15 times faster (dropping from ~631 µs to ~41 µs). Looking at the median time, it is a staggering 29 times faster.
 
-While saving a few hundred microseconds seems minor for a single file, awkreader is designed to traverse directories containing thousands or millions of files. By removing this bottleneck, we have significantly improved the scalability of the package for real-world, large-scale data workflows.
-
 ---
 
 ## 4. Introducing the `record_count` Function 
