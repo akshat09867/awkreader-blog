@@ -218,7 +218,7 @@ filtered.fread(the.files = "diamonds.csv", the.filter = "price > 1000 & color %i
 
 Looking at this complete structural breakdown, where the price column holds a coordinate value like 59 and depth is loaded with characters (it seems logical to assume our row count would be broken too).
 
-To verify, I ran a benchmark comparing our delimited tool against a native `data.table::fread()` operation:
+To verify, I ran a benchmark comparing the space-separated version of our tool against a native `data.table::fread()` operation:
 
 ```r
 d2 <- filtered.fread(
