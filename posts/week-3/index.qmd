@@ -87,7 +87,7 @@ skip.limit <- skip + 1
 and generate the AWK rule:
 
 ```awk
-FNR <- skip.limit {next}
+FNR <= skip.limit {next}
 ```
 
 This ensures that AWK ignores the junk rows and the header row, starting its matching logic exactly on the first row of real data across all processed files.
@@ -119,7 +119,7 @@ Look at what happened to the columns: "Very" stayed in cut, "Good" took over col
 
 The fix was to cleanly manage column boundaries at the pipeline exit. By configuring the AWK script to emit records with strict comma-separation (`-v OFS=","`) and forcing R's `fread()` to parse with `sep=","`, observations containing nested spaces are held tightly within their true column structures (analogous to what we did for record.count function in [week-2](https://aksh-at-blog.netlify.app/posts/week-2/){.external target="_blank"}).
 
-## The AWK Lexicographical Comparison Trap
+## #2. The AWK Lexicographical Comparison Trap
 
 Just when I thought the pipeline was in good shape, we hit an even deeper data type bug while benchmarking different datasets.
 
@@ -150,7 +150,6 @@ To resolve this once and for all, I had to teach our R translation engine how to
 By leveraging a vectorized `as.numeric()` check inside the quoting block, the engine can now dynamically escape numbers while keeping text string literals safely wrapped:
 
 ```r
-
 # Check if the value can be successfully converted to a pure number
 is.numeric.string <- !is.na(suppressWarnings(as.numeric(ending.values)))
 
@@ -174,14 +173,26 @@ In this run, we keep our comma-separated stream intact but leave the dictionary-
 Predictably, the column alignment arrives flawlessly because the commas preserve the boundaries of words like "Very Good". However, because AWK is still sorting alphabetically, the total row count swells far beyond the true numerical subset:
 
 ```r
-filtered.fread(
-  the.files = "diamonds.csv",
-  the.filter = "price > 1000 & color %in% c('E', 'F')"
-)[(.N - 1):.N, ]
+filtered.fread(the.files = "diamonds.csv", the.filter = "price > 1000 & color %in% c('E', 'F')")[(.N - 1):.N, ]
+
+   carat       cut  color clarity depth table price     x     y    z         file
+   <num>    <char> <char>  <char> <num> <num> <int> <num> <num> <num>       <char>
+1:   0.7 Very Good      E     VS2  60.5    59  2757  5.71  5.76  3.47 diamonds.csv
+2:   0.7 Very Good      E     VS2  61.2    59  2757  5.69  5.72  3.49 diamonds.csv
+```
+
+However, because AWK is still sorting alphabetically, the total row count swells far beyond the true numerical subset:
+
+```r
+d2 <- filtered.fread(the.files = "diamonds.csv", the.filter = "price >= 1000")
+print(d2[, .N])
+
+tt <- fread("diamonds.csv")
+print(tt[price >= 1000, .N])
 
 # Actual row count comparison (Alphabetical vs. True Numerical)
-[1] 53940
-[1] 39441
+[1] 53940  # Output with alphabetical matching error
+[1] 39441  # True count expected from a correct query
 ```
 
 Our prediction holds perfectly: columns look beautiful, but the data density is corrupted because AWK evaluated `"326" >= "1000"` as true.
@@ -193,13 +204,19 @@ Now let's flip the switches. What happens if we correct the quoting logic so AWK
 As expected, our printout shows the destructive off-by-one column cascade because "Very Good" splits into separate pieces:
 
 ```r
-filtered.fread(
-  the.files = "diamonds.csv",
-  the.filter = "price > 1000 & color %in% c('E', 'F')"
-)[(.N - 1):.N, ]
+filtered.fread(the.files = "diamonds.csv", the.filter = "price > 1000 & color %in% c('E', 'F')")[(.N - 1):.N, ]
+
+   carat    cut  color clarity  depth table price     x     y    z
+   <num> <char> <char>  <char> <char> <num> <num> <num> <num> <num>
+1:   0.7   Very   Good       E    VS2  60.5    59  2757  5.71  5.76
+2:   0.7   Very   Good       E    VS2  61.2    59  2757  5.69  5.72
+               file
+             <char>
+1: 3.47 diamonds.csv
+2: 3.49 diamonds.csv
 ```
 
-Looking at this complete structural breakdown, where the price column holds a coordinate value like 2757 and depth is loaded with characters (it seems logical to assume our row count would be broken too).
+Looking at this complete structural breakdown, where the price column holds a coordinate value like 59 and depth is loaded with characters (it seems logical to assume our row count would be broken too).
 
 To verify, I ran a benchmark comparing our un-delimited tool against a native `data.table::fread()` operation:
 
