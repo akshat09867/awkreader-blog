@@ -76,9 +76,9 @@ The results are outstanding! The new base R method is, on average, over 15 times
 
 ---
 
-## 4. Introducing the `record_count` Function 
+## 4. Introducing the `record.count` Function 
 
-After optimizing the header extraction, we began building out a standalone `record_count()` function, mirroring the behavior found in [`grepreaper`](https://cran.r-project.org/web/packages/grepreaper/index.html){.external target="_blank"} package.
+After optimizing the header extraction, we began building out a standalone `record.count()` function, mirroring the behavior found in [`grepreaper`](https://cran.r-project.org/web/packages/grepreaper/index.html){.external target="_blank"} package.
 
 I started implementing this by utilizing the existing input and filter logic from our `filtered.fread` function.
 
@@ -111,7 +111,7 @@ awk -F ',' '
 To verify that this baseline logic integrated smoothly into the R wrapper, I ran a quick initial test query:
 
 ```r
-record_count(
+record.count(
   the.files = the.files,
   the.filter = "user > item & rating == 4",
   return.as = "all",
@@ -245,7 +245,7 @@ The execution pipeline is running flawlessly now! Here is a peek at the clean, r
 ### Running Without Filenames
 
 ```r
-record_count(
+record.count(
   the.files = the.files,
   the.filter = "user > item & rating == 4",
   return.as = "all",
@@ -266,7 +266,7 @@ $result
 ### Running With Filenames & Inspecting Generated AWK
 
 ```r
-record_count(
+record.count(
   the.files = the.files,
   the.filter = "rating == 3 | rating == 4",
   include.filename = TRUE,
