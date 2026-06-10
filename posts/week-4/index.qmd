@@ -18,7 +18,7 @@ Welcome back! This week was all about breaking our own code, finding the hidden 
 
 ## 1. The Trap with the `skip` Parameter
 
-While doing some experiments with the `skip` parameter we built back in Week 3, we tried running this filtering query on a clean dataset:
+While doing some experiments with the `skip` parameter we built back in [Week 3](https://aksh-at-blog.netlify.app/posts/week-3/){.external target="_blank"}, we tried running this filtering query on a clean dataset:
 
 ```r
 filtered.fread(
@@ -155,7 +155,7 @@ the.filter = "V2 == 'sFFbD3fA0Jsvs7Ic' & V3 >= sqrt(log(V3))"
 
 ## 3. Intelligent Quotient: Generalizing Function Quoting
 
-Recall our update to the logical translation engine back in Week 3, where we attempted to protect mathematical functions from being wrapped in literal string quotation marks. Our initial fix was functional, but it relied on a hardcoded list of prevalent math terms (`log`, `mean`, `sqrt`, etc.). While we were heading in the right direction, it made way more sense to generalize the parser entirely.
+Recall our update to the logical translation engine back in [Week 3](https://aksh-at-blog.netlify.app/posts/week-3/){.external target="_blank"}, where we attempted to protect mathematical functions from being wrapped in literal string quotation marks. Our initial fix was functional, but it relied on a hardcoded list of prevalent math terms (`log`, `mean`, `sqrt`, etc.). While we were heading in the right direction, it made way more sense to generalize the parser entirely.
 
 Instead of keeping a static list of allowed words, we transitioned to evaluating the structural shape of the expression string using regular expressions. If an expression looks like a symbolic function call and isn't explicitly wrapped in quotes by the user, we keep it unquoted so AWK can execute it as an operation on the column data.
 
