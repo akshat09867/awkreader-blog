@@ -1,0 +1,192 @@
+---
+title: "Week 4: Handling Edge Cases, the Header Parameter, and Intelligent Quoting"
+author: "Akshat Maurya"
+date: "2026-06-10"
+categories: [awkreader, GSoC, RStats, Optimization]
+image: "sd.jpg"
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: flatly
+---
+
+# Week 4: Handling Edge Cases, the Header Parameter, and Intelligent Quoting
+
+Welcome back! This week was all about breaking our own code, finding the hidden traps in file parsing, and making our package significantly smarter at handling messy data layouts.
+
+## 1. The Trap with the `skip` Parameter
+
+While doing some experiments with the `skip` parameter we built back in Week 3, we tried running this filtering query on a clean dataset:
+
+```r
+filtered.fread(
+  the.files = "~/Downloads/diamonds.csv",
+  the.filter = "price > 1000 & color %in% c('E', 'F')",
+  skip = 5,
+  return.as = "all"
+)
+```
+
+Here is the exact output we got back:
+
+```r
+$result
+Null data.table (0 rows and 0 cols)
+
+$code
+"awk -F ',' -v OFS=',' 'FNR <= 6 { next }{if(\"price\" > 1000 && (\"color\"==\"E\"||\"color\"==\"F\")) print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,FILENAME}' '/home/akshat/Downloads/diamonds.csv'"
+```
+
+There wasn't a single row in the result. Complete empty silence.
+
+If we look closely at the generated AWK code, the conditional query has the literal column names wrapped in quotes as `\"price\"` and `\"color\"` instead of mapping them to their actual column indexes, which should be `$3` and `$7`.
+
+### Why is this happening?
+
+#### The Core Cause
+
+In a clean file like `diamonds.csv`, the column header is on line 1. By passing `skip = 5`, our function skips the first 5 lines of the file completely. When the translation engine goes to read the column headers to map out the AWK column indexes, it interprets line 6 (which is actually just a raw data row of diamond metrics like `0.24, Very Good, J...`) as the header row.
+
+#### The Translation Failure
+
+Because there are no columns literally named `"price"` or `"color"` inside that raw data row, the translation engine fails to map them to `$3` or `$7`. It leaves them as raw text strings. Since evaluating a text string comparison like `"price" > 1000` is invalid math in AWK, it returns `FALSE` for every single row, yielding a null data table.
+
+### Our Approach: Expanding `skip` Capability
+
+With that said, we realized we needed to expand `skip` capabilities beyond just dropping lines blindly. If a user has a file with 3 lines of junk metadata, but then wants to skip the first 10 rows of actual data, a single integer isn't enough.
+
+We refactored `skip` to support both a single numeric value (for backwards compatibility) and a flexible list object with explicit sub-objects:
+
+- `skip_metadata_rows`: How many junk rows before the data's header to skip.
+- `skip_data_rows`: How many rows of actual data to skip after reading the header.
+
+Here is the implementation layout:
+
+```r
+if (is.list(skip)) {
+  if (!is.null(skip$skip.data.rows)) {
+    data.skip <- skip$skip.data.rows
+  }
+
+  if (!is.null(skip$skip.metadata.rows)) {
+    metadata.skip <- skip$skip.metadata.rows
+
+    # If passed as text, dynamically find the line matching the pattern
+    if (is.character(metadata.skip)) {
+      preview.lines <- readLines(the.files[1], n = 100, warn = FALSE)
+      match.index <- which(grepl(metadata.skip, preview.lines))[1]
+
+      if (is.na(match.index)) {
+        stop(sprintf("The skip pattern '%s' was not found in the file.", metadata.skip))
+      }
+
+      metadata.skip <- match.index - 1
+    }
+  }
+
+} else if (is.character(skip)) {
+
+  # String pattern match shortcut
+  preview.lines <- readLines(the.files[1], n = 100, warn = FALSE)
+  match.index <- which(grepl(skip, preview.lines))[1]
+
+  if (is.na(match.index)) {
+    stop(sprintf("The skip pattern '%s' was not found in the file.", skip))
+  }
+
+  metadata.skip <- match.index - 1
+
+} else if (is.numeric(skip)) {
+  metadata.skip <- skip
+}
+```
+
+## 2. Introducing the `header` Parameter
+
+In most real-world datasets, we have to deal with messy rows or inconsistent data types, but at least we have a header line. However, there is always the possibility that we get raw data files with absolutely no header row at all.
+
+To handle this safely, we introduced a logical `header` parameter (inspired by `data.table::fread`).
+
+Here is an overview of how we handle this extraction behind the scenes:
+
+```r
+header.line <- readLines(first.file.con, n = 1)
+close(first.file.con)
+
+if (header) {
+
+  # Standard extraction: Parse the column names from line 1
+  all.variables <- unlist(strsplit(header.line, split = delim, fixed = TRUE))
+  all.variables <- gsub('^"|"$', "", all.variables)
+
+  if (is.null(the.variables) | "." %in% the.variables) {
+    the.variables <- all.variables
+  }
+
+  if (sum(the.variables %in% all.variables) == 0) {
+    stop("No variables in the data were specified.")
+  }
+
+} else {
+
+  # No header? Count the columns and auto-assign default V-names
+  num_cols <- length(strsplit(header.line, delim, fixed = TRUE)[[1]])
+  all.variables <- paste0("V", 1:num_cols)
+
+  if (is.null(the.variables) || "." %in% the.variables) {
+    the.variables <- all.variables
+  }
+
+  if (sum(the.variables %in% all.variables) == 0) {
+    stop("No variables in the data were specified.")
+  }
+}
+```
+
+If `header = TRUE`, everything runs normally. If `header = FALSE`, we dynamically calculate the column count of the line and generate default variables named `V1`, `V2`, `V3`... on the fly. Assigning these specific names is crucial because it gives users a consistent, familiar mental model matching standard `fread()` behavior.
+
+Now, a user working with headerless data can write incredibly complex queries completely naturally:
+
+```r
+the.filter = "V2 == 'sFFbD3fA0Jsvs7Ic' & V3 >= sqrt(log(V3))"
+```
+
+## 3. Intelligent Quotient: Generalizing Function Quoting
+
+Recall our update to the logical translation engine back in Week 3, where we attempted to protect mathematical functions from being wrapped in literal string quotation marks. Our initial fix was functional, but it relied on a hardcoded list of prevalent math terms (`log`, `mean`, `sqrt`, etc.). While we were heading in the right direction, it made way more sense to generalize the parser entirely.
+
+Instead of keeping a static list of allowed words, we transitioned to evaluating the structural shape of the expression string using regular expressions. If an expression looks like a symbolic function call and isn't explicitly wrapped in quotes by the user, we keep it unquoted so AWK can execute it as an operation on the column data.
+
+### The Generalized Approach
+
+```r
+# 1. Look for the structural signature of a function call: word(...)
+is.function.call <- grepl(
+  pattern = "^[A-Za-z0-9_.]+\\s*\\(.*\\)$",
+  x = trimws(ending.values)
+)
+
+# 2. Check if the user already provided literal quotes around it
+has.quotes <- grepl(
+  "^['\"].*['\"]$",
+  trimws(ending.values)
+)
+
+# 3. Guard numerical values
+is.numeric.string <- !is.na(
+  suppressWarnings(as.numeric(ending.values))
+)
+
+# 4. Only wrap in quotes if it's text, NOT a function,
+#    NOT a number, and NOT already quoted
+to.quote <- (is.character(ending.values) | is.factor(ending.values)) &
+            !is.function.call &
+            !is.numeric.string &
+            !has.quotes
+
+ending.values[to.quote] <- sprintf('"%s"', ending.values[to.quote])
+```
+
+By switching to this abstract regex approach, we've completely future-proofed our translation loop. Whether a user passes a standard math routine or an unanticipated AWK text transformation tool like `tolower(V2)`, our engine recognizes the call syntax perfectly, bypasses the quote-wrapper, and passes the clean execution command straight to AWK.
