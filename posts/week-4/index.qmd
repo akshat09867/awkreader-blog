@@ -59,8 +59,8 @@ With that said, we realized we needed to expand `skip` capabilities beyond just 
 
 We refactored `skip` to support both a single numeric value (for backwards compatibility) and a flexible list object with explicit sub-objects:
 
-- `skip_metadata_rows`: How many junk rows before the data's header to skip.
-- `skip_data_rows`: How many rows of actual data to skip after reading the header.
+- `skip.metadata.rows`: How many junk rows before the data's header to skip.
+- `skip.data.rows`: How many rows of actual data to skip after reading the header.
 
 Here is the implementation layout:
 
