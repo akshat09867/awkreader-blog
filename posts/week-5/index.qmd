@@ -130,7 +130,7 @@ writeLines(awk.script.content, con = temp.script)
 on.exit(unlink(temp.script), add = TRUE)
 ```
 
-### Why this architecture completely solves our problems
+### Why this architecture thorouhly solves our problems
 
 #### Shell Isolation
 
