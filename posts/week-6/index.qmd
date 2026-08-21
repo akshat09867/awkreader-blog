@@ -1,0 +1,88 @@
+---
+title: "Week 7-8: Performing niche optimizations"
+author: "Akshat Maurya"
+date: "2026-07-17"
+categories: [awkreader, GSoC, RStats, Optimization]
+image: "ax.avif"
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: flatly
+---
+
+# Summarizing Data and Taming Messy Directories: New Versatility in `awkreader`
+
+Since we’re already using AWK to handle the heavy lifting of extracting, filtering, and counting records, we figured: why stop there? We decided to step completely out of our comfort zone and introduce some niche capabilities that AWK *doesn't* natively support.
+
+If you've ever tried to write complex summarization logic in raw AWK, you probably already know exactly where this is going...
+
+## Introducing `aggregated.fread`
+
+Bringing data aggregation into the mix was equal parts daunting and compelling. We wanted users to leverage AWK's blistering speed to summarize their data on disk *before* it even hits R's memory.
+
+### The "Why"
+
+Let's look at why AWK doesn't natively support aggregation functions like `mean`, `median`, or `count`. You can't just write something like this and call it a day:
+
+Bash
+
+```
+awk '{ mean($5) } END { print "success" }' data.csv
+
+```
+
+AWK is designed to stream data row by row, executing operations on the fly. This makes it perfect for mathematical functions evaluated instantly (like `sqrt()` or `log()`). However, calculating a metric like an average requires tracking the sum and the count across *all* rows simultaneously.
+
+### The Solution
+
+AWK *does* provide associative arrays to handle this, but the syntax can quickly become a tangled, complex nightmare. It's the reason why writing aggregation scripts in AWK is usually reserved for hardcore command-line veterans and even for them, it's a time-consuming chore.
+
+To circumvent this, we created `aggregated.fread`.
+
+### How it Works
+
+Behind the scenes, we are dynamically building and compiling the complex AWK associative arrays for you. It is one of the most optimal approaches. Inside the engine, it looks something like this:
+
+
+```r
+if (func.clean == "n") {
+  awk.body.statements <- c(awk.body.statements, sprintf("count_%s[%s]++;", var.prefix, group.awk))
+  awk.end.prints <- c(awk.end.prints, sprintf("count_%s[i]", var.prefix))
+
+} else if (func.clean == "min") {
+  awk.body.statements <- c(awk.body.statements, sprintf("if (!(%s in min_%s) || %s < min_%s[%s]) min_%s[%s] = %s;", group.awk, var.prefix, col.awk, var.prefix, group.awk, var.prefix, group.awk, col.awk))
+  awk.end.prints <- c(awk.end.prints, sprintf("min_%s[i]", var.prefix))
+
+} else if (func.clean == "max") {
+  awk.body.statements <- c(awk.body.statements, sprintf("if (!(%s in max_%s) || %s > max_%s[%s]) max_%s[%s] = %s;", group.awk, var.prefix, col.awk, var.prefix, group.awk, var.prefix, group.awk, col.awk))
+  awk.end.prints <- c(awk.end.prints, sprintf("max_%s[i]", var.prefix))
+
+} else if (func.clean == "sum") {
+  awk.body.statements <- c(awk.body.statements, sprintf("sum_%s[%s] += %s;", var.prefix, group.awk, col.awk))
+  awk.end.prints <- c(awk.end.prints, sprintf("sum_%s[i]", var.prefix))
+
+} else if (func.clean == "mean") {
+  awk.body.statements <- c(awk.body.statements, sprintf("sum_%s[%s] += %s;", var.prefix, group.awk, col.awk), sprintf("count_%s[%s]++;", var.prefix, group.awk))
+  awk.end.prints <- c(awk.end.prints, sprintf("(count_%s[i] > 0 ? (sum_%s[i] / count_%s[i]) : \"NA\")", var.prefix, var.prefix, var.prefix))
+}
+
+```
+
+One of our biggest hurdles here was calculating the **median**. An exact median doesn't just require storing every single record in memory; it requires *sorting* them. That destroys our linear time complexity and eats up RAM. To solve this without bottlenecking performance, we implemented the **P-Square algorithm** to calculate a highly accurate streaming estimation of the median on the fly!
+
+## Taming Messy Directories with `file.pattern`
+
+Let's say your data directory is an absolute disaster by containig a chaotic mix of `.csv`, `.psv`, and random text files buried deep inside nested subfolders. If you just want to extract information from one specific type of file, it used to be a cumbersome, overwhelming task.
+
+Not anymore.
+
+With our new `file.pattern` parameter, you can directly dictate exactly what type of file you want to target. It accepts a highly versatile range of inputs:
+
+- Simple extensions: `"csv"` or `".csv"`
+- Wildcards: `"*.csv"`
+- Custom Regex strings: `"\\.csv$"`
+
+And if those files are hiding inside subfolders? Just set `recursive = TRUE`, and `awkreader` will hunt them all down for you.
+

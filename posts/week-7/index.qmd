@@ -1,0 +1,121 @@
+---
+title: "Week 9-10: Submission Phase"
+author: "Akshat Maurya"
+date: "2026-07-17"
+categories: [awkreader, GSoC, RStats, Optimization]
+image: "ax.avif"
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: flatly
+---
+
+# Submission to CRAN
+
+After all the groundwork of the previous weeks, `awkreader` was finally in fighting shape for its CRAN debut. The vignette was polished, the new methods (`record.count` and `aggregated.fread`) were documented, and we had a shiny new suite of parameters (`delim`, `skip`, `file.pattern`) to show off. 
+
+With everything pushed to the repo, I took a deep breath and hit the "CI checks" button. There's no sweeter mix of relief and terror than watching the badges turn green or red. 
+
+Linux? Passed. Mac? Passed. 
+
+Windows? ...Of course it didn't. 
+
+It wouldn't be an R package submission without at least one sacrificial offering to the Windows gods.
+
+## The Failure (A Classic)
+
+The error logs pointed a glaring finger at `helpers.R` while building the vignette, specifically this line:
+
+```r
+# Count records in all CSV files in the data directory
+combined.fread(the.files = data.path, file.pattern = "*.csv")
+```
+
+My immediate suspect was quoting. Surely, a rogue space in a file path was breaking the awk command. I went on a quoting spree: shQuote everywhere, double quotes, single quotes, you name it. Still red.
+
+I even tried the old "8.3 short filename" trick (shortPathName()) to dodge spaces. It turns out that was a complete dead end: modern Windows Server CI images frequently disable 8.3 generation for performance, meaning shortPathName() just silently hands back the long path without any warning. A classic Windows booby trap.
+
+After staring at the failure for far too long, I realized the truth: it wasn't a space in the path. It was a hostile takeover of the shell.
+
+#### Plot Twist: The Shell Hijack
+
+fread(cmd = ...) doesn't execute commands directly. On Windows, it hands the string off to R's shell() function. shell() checks R_SHELL, then SHELL, and only falls back to COMSPEC (cmd.exe) if neither is set.
+On the GitHub Actions runner, SHELL was pointing squarely at Rtools' bash.exe, a necessary evil for compiling source packages during the build process.
+
+Here's where things went off the rails: normalizePath() on Windows happily returns paths with backslashes, like:
+
+```text
+C:\rtools45\usr\bin\awk.exe
+```
+That's perfectly legible to cmd.exe. But to bash? It's complete gibberish. Bash treats backslashes as escape characters and the colon as a path separator in the context of a drive specifier. It had absolutely no idea what `C:\rtools45...` was supposed to mean and immediately threw exit code 127, the dreaded "command not found" error.
+
+Better quoting wouldn't have saved me, because the binary name itself was unparseable in that shell's syntax. I wasn't fighting a quoting bug; I was fighting a fundamental mismatch between how Windows paths are represented and how a POSIX shell interprets them.
+
+The fix wasn't cosmetic; it was structural. I forced shell() to skip bash entirely by temporarily unsetting SHELL and R_SHELL, ensuring it fell back to cmd.exe:
+
+```r
+if (is.windows) {
+  old.shell  <- Sys.getenv("SHELL",   unset = NA)
+  old.rshell <- Sys.getenv("R_SHELL", unset = NA)
+  Sys.unsetenv("SHELL")
+  Sys.unsetenv("R_SHELL")
+  on.exit({
+    if (!is.na(old.shell))  Sys.setenv(SHELL = old.shell)
+    if (!is.na(old.rshell)) Sys.setenv(R_SHELL = old.rshell)
+  }, add = TRUE)
+}
+```
+This forced shell() to fall through to COMSPEC (i.e., cmd.exe). The AWK binary finally ran without complaint.
+
+...Except now, Windows decided to hit me with its other favorite limitation.
+
+#### The Second Punch: Command Line Length
+
+With cmd.exe finally in charge, I hit a brand-new wall. Windows has a hard-coded command-line length limit of 8,191 characters. My command, passing hundreds of CSV files at once, was clocking in at nearly 18,000 characters.
+
+I was essentially asking cmd.exe to swallow a full sandwich in one bite. It choked immediately.
+
+The fix was to stop relying on the user to set `num.files.per.batch` correctly and instead make the function self-aware. I added a dynamic chunking system that splits each batch into sub-chunks:
+
+```r
+file.chunks <- list()
+current <- character(0)
+current.len <- fixed.prefix.chars
+for (f in norm.batch.files) {
+  f.len <- nchar(f) + 3L
+  if (length(current) > 0 && (current.len + f.len) > max.cmd.chars) {
+    file.chunks[[length(file.chunks) + 1]] <- current
+    current <- character(0)
+    current.len <- fixed.prefix.chars
+  }
+  current <- c(current, f)
+  current.len <- current.len + f.len
+}
+if (length(current) > 0) file.chunks[[length(file.chunks) + 1]] <- current
+
+chunk.cmds <- vapply(file.chunks, run.chunk, character(1))
+awk.statements[i] <- paste(chunk.cmds, collapse = " && ")
+```
+Now, regardless of the original batch size, the function automatically splits the file list into sub-chunks that respect the 7,000-character safety limit and chains them together with &&.
+
+### The Sweet Victory
+With both fixes in place, the Windows build turned green faster than I could refresh the page.
+
+All checks passed. No errors. No warnings.
+
+awkreader will shortly be officially **going live** on CRAN!
+
+Key Takeaway
+Cross-platform R development isn't just about writing portable R code; it's about understanding how your functions interact with the underlying OS, shell environments, and system-level limitations. The same function that works flawlessly on your local machine can unravel in surprising ways on a CI runner with a different SHELL environment variable or a stricter command-line limit.
+
+If there's one thing this experience taught me, it's this: don't assume. Test on Windows. And when it fails, question not just your code, but the entire execution environment.
+
+### Give It a Spin
+
+`awkreader` will shortly be live on CRAN. Install it with:
+
+```r
+install.packages("awkreader")
+```
