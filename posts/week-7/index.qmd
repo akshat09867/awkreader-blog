@@ -14,13 +14,13 @@ format:
 
 # Submission to CRAN
 
-After all the groundwork of the previous weeks, `awkreader` was finally in fighting shape for its CRAN debut. The vignette was polished, the new methods (`record.count` and `aggregated.fread`) were documented, and we had a shiny new suite of parameters (`delim`, `skip`, `file.pattern`) to show off. 
+After all the groundwork of the previous weeks, `awkreader` was finally in fighting shape for its CRAN debut. The vignette was polished, the new methods (`record.count` and `aggregated.fread`) were documented, and we had a shiny new suite of parameters (`delim`, `skip`, `file.pattern`) to show off.
 
-With everything pushed to the repo, I took a deep breath and hit the "CI checks" button. There's no sweeter mix of relief and terror than watching the badges turn green or red. 
+With everything pushed to the repo, I took a deep breath and hit the "CI checks" button. There's no sweeter mix of relief and terror than watching the badges turn green or red.
 
-Linux? Passed. Mac? Passed. 
+Linux? Passed. Mac? Passed.
 
-Windows? ...Of course it didn't. 
+Windows? ...Of course it didn't.
 
 It wouldn't be an R package submission without at least one sacrificial offering to the Windows gods.
 
@@ -114,8 +114,4 @@ If there's one thing this experience taught me, it's this: don't assume. Test on
 
 ### Give It a Spin
 
-`awkreader` will shortly be live on CRAN. Install it with:
-
-```r
-install.packages("awkreader")
-```
+[`awkreader`](https://cran.r-project.org/web/packages/awkreader/index.html) is live on cran, do give it a try.
